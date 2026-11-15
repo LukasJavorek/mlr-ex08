@@ -313,6 +313,38 @@ function cropPreview(source, srcW, srcH) {
 
 /* --------------------------------------------------------------- inference -- */
 
+function delay(ms) { return new Promise((ok) => setTimeout(ok, ms)); }
+
+function msgOf(err) { return err && err.message ? err.message : String(err); }
+
+/* A local copy opened by double-clicking runs on file://, where browsers refuse to
+   read the sibling .onnx file. Nothing can work there except the photo preview. */
+function isLocalFileCopy() { return location.protocol === 'file:'; }
+
+function modelLoadErrorMessage(err) {
+  if (isLocalFileCopy()) {
+    return 'This is a copy of the page opened from disk, so the browser blocks the model file. ' +
+      'Open the live page instead (link and QR code further down this page).';
+  }
+  return 'Model could not be loaded: ' + msgOf(err) + ' — check the connection and try again.';
+}
+
+async function fetchModelBytes() {
+  let lastErr = new Error('model fetch did not run');
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      if (attempt > 1) setStatus('Model download failed, retrying (' + attempt + '/3)…', 'warn');
+      const res = await fetch(MODEL_URL, { cache: 'default' });
+      if (!res.ok) throw new Error('could not fetch ' + MODEL_URL + ' (HTTP ' + res.status + ')');
+      return new Uint8Array(await res.arrayBuffer());
+    } catch (err) {
+      lastErr = err;
+      await delay(700 * attempt);
+    }
+  }
+  throw lastErr;
+}
+
 async function loadModel() {
   setStatus('Loading model…');
   try {
@@ -321,6 +353,9 @@ async function loadModel() {
   } catch (e) { /* keep fallbacks */ }
   buildRows();
 
+  if (isLocalFileCopy()) {
+    throw new Error('opened from disk (file://): the model file cannot be read here');
+  }
   if (typeof ort === 'undefined') throw new Error('onnxruntime-web did not load (CDN blocked?)');
 
   // Single-threaded, no worker proxy: works in Safari/iOS without SharedArrayBuffer.
@@ -329,13 +364,18 @@ async function loadModel() {
   ort.env.wasm.simd = true;
   ort.env.logLevel = 'error';
 
-  const res = await fetch(MODEL_URL);
-  if (!res.ok) throw new Error('could not fetch ' + MODEL_URL + ' (HTTP ' + res.status + ')');
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  session = await ort.InferenceSession.create(bytes, {
-    executionProviders: ['webgl', 'wasm'],
-    graphOptimizationLevel: 'all',
-  });
+  const options = { executionProviders: ['webgl', 'wasm'], graphOptimizationLevel: 'all' };
+  try {
+    session = await ort.InferenceSession.create(await fetchModelBytes(), options);
+  } catch (err) {
+    // Last resort: let onnxruntime fetch the model itself (different code path,
+    // works when reading the whole file into memory is what failed).
+    try {
+      session = await ort.InferenceSession.create(MODEL_URL, options);
+    } catch (err2) {
+      throw new Error(msgOf(err) + ' (fallback loader: ' + msgOf(err2) + ')');
+    }
+  }
   const inputName = session.inputNames[0];
   const outName = session.outputNames[0];
   setStatus('Model ready (' + session.outputNames.join(', ') + ').');
@@ -353,8 +393,15 @@ async function classify(source, srcW, srcH) {
 }
 
 let modelPromise = null;
+/* One download shared by everybody. If it fails the cache is cleared, so the next
+   tap retries instead of replaying the same stale error for the whole session. */
 function loadModelOnce() {
-  if (!modelPromise) modelPromise = loadModel();
+  if (!modelPromise) {
+    modelPromise = loadModel().catch((err) => {
+      modelPromise = null;
+      throw err;
+    });
+  }
   return modelPromise;
 }
 
@@ -442,7 +489,7 @@ async function tick() {
         (supportsRVFC ? 'per video frame' : 'timed') + ' updates';
     } catch (err) {
       running = false;
-      setStatus('Inference failed: ' + (err && err.message ? err.message : err), 'err');
+      setStatus(session ? 'Inference failed: ' + msgOf(err) : modelLoadErrorMessage(err), 'err');
     } finally {
       busy = false;
     }
@@ -464,6 +511,12 @@ function handleFile(file) {
     stage.classList.remove('idle');
     setStatus('Classifying ' + file.name + '…');
     try {
+      await loadModelOnce();            // so a model problem is not reported as a bad image
+    } catch (err) {
+      setStatus(modelLoadErrorMessage(err), 'err');
+      return;
+    }
+    try {
       const probs = await classify(img, img.naturalWidth, img.naturalHeight);
       renderProbs(probs);
       metricsEl.textContent = 'photo ' + img.naturalWidth + '×' + img.naturalHeight +
@@ -472,7 +525,7 @@ function handleFile(file) {
         ' → ' + info.input_size + '×' + info.input_size;
       setStatus('Photo classified.');
     } catch (err) {
-      setStatus('Could not classify that image: ' + (err && err.message ? err.message : err), 'err');
+      setStatus('Could not classify that image: ' + msgOf(err), 'err');
     }
   };
   img.onerror = () => { URL.revokeObjectURL(url); setStatus('Could not read that image.', 'err'); };
@@ -589,12 +642,17 @@ $('startBtn').addEventListener('click', startCamera);
 $('stopBtn').addEventListener('click', () => { stopCamera(); stage.classList.add('idle'); setStatus('Camera stopped.'); });
 $('fileInput').addEventListener('change', (e) => handleFile(e.target.files && e.target.files[0]));
 
-loadModel().then(() => {
-  if (!isSelfTest) setStatus('Model ready. Press “Start camera”.');
-}).catch((err) => {
-  setStatus('Model failed to load: ' + (err && err.message ? err.message : err), 'err');
-  if (isSelfTest) runSelfTest();
-});
+if (isLocalFileCopy()) {
+  setStatus('This is a copy of the page opened from disk (file://), and browsers do not allow the ' +
+    'model file to be read here. Open the live page instead — clickable link and QR code below.', 'warn');
+} else {
+  loadModelOnce().then(() => {
+    if (!isSelfTest) setStatus('Model ready. Press “Start camera”.');
+  }).catch((err) => {
+    setStatus(modelLoadErrorMessage(err), 'err');
+    if (isSelfTest) runSelfTest();
+  });
+}
 initQr();
 if (isSelfTest) runSelfTest();
 
