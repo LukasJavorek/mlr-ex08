@@ -42,7 +42,7 @@
 * **`ColorJitter` on the 15-epoch scratch CNN (`V1`):** Although `V1` looked promising on `camera_val_acc` in `seed=0` (`0.7333`), repeating across 3 seeds revealed that 15 epochs is too short for the scratch CNN to learn under heavy color distortion: 3-seed `val_acc` dropped by nearly 10 percentage points (`0.8611` → `0.7639`), and mean `camera_val_acc` (`0.6861 ± 0.0614`) barely beat `V0` (`0.6750 ± 0.0382`).
 * **Frozen Pretrained Backbone (`V6`):** Training only the linear head of `MobileNetV3-Small` overfit the training features (`train_acc = 0.9971`) while underperforming the scratch baseline on `val_acc` (`0.8083` vs. `0.8917`). Domain adaptation to `96×96` leaf images required unfreezing the backbone (`V7`).
 * **Best-epoch checkpointing on 15-epoch `V0` (`V5`):** Produced identical numbers to `V0` (`0.8917` / `0.6667`) because the final epoch (epoch 15) was already the best epoch.
-
+proof [Screenshot from phone](Screenshot_20261115_233737_Samsung Browser.jpg)
 ### 5. Which Model to Put on the Phone
 I would deploy **`V9` (Full fine-tuned `MobileNetV3-Small` trained for 30 epochs with geometric + `ColorJitter` augmentation, `CosineAnnealingLR`, `AdamW(weight_decay=1e-2)`, `label_smoothing=0.1`, and best-epoch weights)**. 
 
