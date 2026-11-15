@@ -18,10 +18,12 @@ encodes exactly the URL above, generated in the browser by the vendored
 | File | Purpose |
 | --- | --- |
 | `index.html` | the whole app: camera, preprocessing, inference, UI, photo fallback, QR code |
-| `leaf_model.onnx` | MobileNetV3-based classifier, input `image` (1×3×96×96 float32), output `linear_1` (4 logits) |
+| `leaf_model.onnx` | MobileNetV3-Small classifier (ablation variant V9), input `image` (1×3×96×96 float32), output `logits` (4 raw logits) |
 | `model_info.json` | class names, input size and channel mean/std — read by the page at run time |
 | `check_image.jpg` | 96×96 verification image |
 | `check_expected.json` | expected probabilities for `check_image.jpg` |
+| `ablation.py`, `export_model.py`, `make_table.py` | the ablation study, the export step, the table generator — not part of the app |
+| `ablation_results.csv`, `ablation_report.md` | every measured variant and the summary table |
 
 ## Preprocessing (follows `model_info.json` exactly)
 
@@ -33,7 +35,40 @@ encodes exactly the URL above, generated in the browser by the vendored
 5. feed a `float32` tensor of shape **1 × 3 × 96 × 96** (channel-first).
 
 The ONNX graph ends in a fully connected layer and contains no `Softmax` node,
-so `linear_1` holds raw logits; the page applies softmax to get probabilities.
+so `logits` holds raw logits; the page applies softmax to get probabilities.
+
+## Which model is in `leaf_model.onnx`
+
+The shipped model is variant **V9** of the study in `ablation.py`: a pretrained
+`torchvision.models.mobilenet_v3_small`, final classifier replaced by
+`Linear(in, 4)` and fine-tuned on the 700 training leaves with random
+crop/rotation/flip **plus** `ColorJitter(0.3, 0.3, 0.3, 0.08)`,
+`AdamW(lr=3e-4, weight_decay=1e-2)`, `CrossEntropyLoss(label_smoothing=0.1)`,
+`CosineAnnealingLR`, 30 epochs, keeping the best epoch's weights.
+
+| model | `val_acc` | `camera_val_acc` |
+| --- | --- | --- |
+| baseline = Task 3 `LeafNetBN` + geometric augmentation | 0.861 ± 0.027 | 0.675 ± 0.038 |
+| **V9, shipped** | **0.917 ± 0.008** | **0.886 ± 0.005** |
+
+Mean ± std over the seeds 0, 1, 2. `camera_val_acc` is measured on a fixed
+"camera-like" version of the validation set: each of the 120 validation images
+pushed once through a random crop (0.5–1.0), a ±30° rotation and
+`ColorJitter(0.3, 0.3, 0.3, 0.08)` with seed 42, generated once and reused for
+every model, so the comparison is fair. The single changes that moved the
+needle were colour jitter (+0.011 camera accuracy on its own, but only when
+combined with the pretrained backbone) and transfer learning itself; `AdaptiveAvgPool2d`
++ `Dropout` alone made the small CNN clearly worse (V2–V5 were measured at seed 0
+only, which is why they have no ± column). Full numbers for V0–V9, including the
+seed spread, are in `ablation_report.md`.
+
+One honest caveat about `check_image.jpg`: it is a 96×96 image saved as JPEG, so
+its compression artefacts are large relative to the leaf. The baseline labels it
+apple, V9 labels it *cherry* (p ≈ 0.64), while V9 labels the uncompressed source
+of that picture (`leaves/val/apple/apple_000.jpg`) correctly as apple on all
+three seeds. `check_expected.json` was regenerated from the shipped model, so
+the self-test below still tests what it is meant to test: that the browser's
+preprocessing and the exported graph agree, not that any class is right.
 
 ## Verify the numbers
 

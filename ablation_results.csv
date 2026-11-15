@@ -1,0 +1,21 @@
+variant_name,what_changed,epochs,seed,train_acc,val_acc,camera_val_acc,hist_val_acc,seconds
+V0,baseline: Task 3 LeafNetBN + geometric augmentation (notebook),15,0,0.8943,0.8917,0.6667,,40.9
+V1,"+ ColorJitter(0.3,0.3,0.3,0.08) in the train transform",15,0,0.8329,0.8167,0.7333,,48.4
+V2,+ AdaptiveAvgPool2d(1) and Dropout(0.2) instead of Flatten,15,0,0.7714,0.8083,0.575,,41.3
+V3,+ AdamW with weight_decay=1e-2 instead of Adam,15,0,0.89,0.875,0.6833,,40.6
+V4,+ CrossEntropyLoss(label_smoothing=0.1),15,0,0.8957,0.8833,0.675,,39.6
+V5,+ best-epoch checkpoint (deepcopy) instead of last-epoch weights,15,0,0.8943,0.8917,0.6667,,40.8
+V6,"transfer: pretrained MobileNetV3-Small, backbone frozen",15,0,0.9971,0.8083,0.7,,16.3
+V7,"transfer: full fine-tuning of MobileNetV3-Small, lr=3e-4",15,0,0.9971,0.8833,0.7917,,44.3
+V8,transfer + geometric & ColorJitter + CosineAnnealingLR + 30 epochs + best epoch,30,0,0.9429,0.9167,0.8583,,110.0
+V9,best combined: V8 + AdamW(weight_decay=1e-2) + label_smoothing=0.1,30,0,0.9757,0.925,0.8833,,110.4
+V0-s1,baseline: Task 3 LeafNetBN + geometric augmentation (notebook),15,1,0.8886,0.85,0.7167,,40.6
+V0-s2,baseline: Task 3 LeafNetBN + geometric augmentation (notebook),15,2,0.8371,0.8417,0.6417,,39.4
+V1-s1,"+ ColorJitter(0.3,0.3,0.3,0.08) in the train transform",15,1,0.7786,0.7333,0.6167,,47.5
+V1-s2,"+ ColorJitter(0.3,0.3,0.3,0.08) in the train transform",15,2,0.7986,0.7417,0.7083,,48.2
+V7-s1,"transfer: full fine-tuning of MobileNetV3-Small, lr=3e-4",15,1,0.9971,0.9333,0.8583,,40.7
+V7-s2,"transfer: full fine-tuning of MobileNetV3-Small, lr=3e-4",15,2,0.9971,0.9083,0.8167,,41.5
+V8-s1,transfer + geometric & ColorJitter + CosineAnnealingLR + 30 epochs + best epoch,30,1,0.9357,0.9167,0.8833,,106.5
+V8-s2,transfer + geometric & ColorJitter + CosineAnnealingLR + 30 epochs + best epoch,30,2,0.9586,0.9083,0.9,,105.6
+V9-s1,best combined: V8 + AdamW(weight_decay=1e-2) + label_smoothing=0.1,30,1,0.9786,0.9083,0.8833,,106.9
+V9-s2,best combined: V8 + AdamW(weight_decay=1e-2) + label_smoothing=0.1,30,2,0.9657,0.9167,0.8917,,107.1

@@ -15,7 +15,7 @@
     3. scale RGB pixels to 0-1
     4. standardise each channel: (x - mean[c]) / std[c]
     5. feed as float32 tensor 1 x 3 x input_size x input_size  (channel-first)
-  The model ends in a fully connected layer (output "linear_1"), i.e. it returns
+  The model ends in a fully connected layer (output "logits"), i.e. it returns
   raw logits, so the probabilities are the softmax of those logits.
 
   Self-check: open this page with ?selftest=1 to classify check_image.jpg and
