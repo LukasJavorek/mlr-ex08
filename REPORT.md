@@ -27,23 +27,35 @@
 
 *(Note: Individual seed runs were: V0 `val_acc` = 0.8917 / 0.8500 / 0.8417, `camera_val_acc` = 0.6667 / 0.7167 / 0.6417; V1 `val_acc` = 0.8167 / 0.7333 / 0.7417, `camera_val_acc` = 0.7333 / 0.6167 / 0.7083; V7 `val_acc` = 0.8833 / 0.9333 / 0.9083, `camera_val_acc` = 0.7917 / 0.8583 / 0.8167; V8 `val_acc` = 0.9167 / 0.9167 / 0.9083, `camera_val_acc` = 0.8583 / 0.8833 / 0.9000; V9 `val_acc` = 0.9250 / 0.9083 / 0.9167, `camera_val_acc` = 0.8833 / 0.8833 / 0.8917.)*
 
-### 2. What Each Change Brought
-* **Baseline (`V0`):** The scratch `LeafNetBN` achieves solid accuracy on clean validation images (`0.8611` mean across 3 seeds), but collapses on the camera-like validation set (`0.6750` mean), showing high sensitivity to lighting/color shifts and framing.
-* **Transfer Learning — Full Fine-Tuning (`V7`):** Switching to a pretrained `MobileNetV3-Small` and unfreezing the entire backbone delivered the single largest jump in the study. Across 3 seeds, `val_acc` rose from `0.8611` to `0.9083` (+4.7 percentage points) and `camera_val_acc` jumped from `0.6750` to `0.8222` (+14.7 percentage points).
-* **Stronger Augmentation + Cosine Schedule + 30 Epochs (`V8`):** While `ColorJitter` hurt the small scratch network in 15 epochs, combining geometric + `ColorJitter` augmentation with `CosineAnnealingLR`, best-epoch checkpointing, and 30 epochs on the higher-capacity `MobileNetV3-Small` pushed 3-seed `camera_val_acc` from `0.8222` (`V7`) up to `0.8805` (+5.8 percentage points) and reduced across-seed variance on `val_acc` (`0.9139 ± 0.0048`).
-* **Regularized Optimization (`V9`):** Adding `AdamW(weight_decay=1e-2)` and `label_smoothing=0.1` on top of `V8` further stabilized training, yielding the highest 3-seed mean on both standard validation (`0.9167 ± 0.0084`) and camera-like validation (`0.8861 ± 0.0048`).
+2. What Each Change Brought
 
-### 3. Is the Difference Larger Than the Noise?
-* **Small scratch-model tweaks (`V3`, `V4`, `V5`) are inside the noise:** On the 120-image validation set (where 1 image = `0.0083` or 0.83 percentage points), the baseline `V0` has a 3-seed standard deviation of `±0.0268` on `val_acc` and `±0.0382` on `camera_val_acc`. Single-seed differences of 0.8–1.7 percentage points in `V3` (`AdamW`) and `V4` (`label_smoothing`) are much smaller than the seed-to-seed noise and cannot be considered real improvements in isolation.
-* **Transfer learning and the combined recipe (`V7`, `V8`, `V9`) are well above the noise:** The gain from `V0` to `V8`/`V9` is **+5.6 percentage points** on clean validation (`0.8611` → `0.9167`) and **+21.1 percentage points** on camera-like validation (`0.6750` → `0.8861`). Every single seed of `V8` and `V9` (`0.8583–0.9000` on `camera_val_acc`) outperforms every single seed of `V0` (`0.6417–0.7167`) by a wide margin, confirming a genuine, reproducible improvement. Between `V8` (`0.8805 ± 0.0210`) and `V9` (`0.8861 ± 0.0048`), the mean difference is small (~0.6 percentage points, less than 1 image), but `V9` exhibits noticeably lower variance across seeds.
+Baseline (V0): The custom LeafNetBN performs well on clean validation images (86.1% mean accuracy across 3 seeds), but struggles on camera-like images (67.5%), proving too sensitive to lighting and framing shifts.
 
-### 4. What Did Not Help
-* **Global Average Pooling + Dropout on the scratch CNN (`V2`):** Replacing `Flatten` with `AdaptiveAvgPool2d(1)` and `Dropout(0.2)` caused severe underfitting in 15 epochs (`train_acc` dropped to `0.7714`, `val_acc` to `0.8083`, and `camera_val_acc` to `0.5750`), because the small scratch network lost spatial feature capacity and needed far more epochs to converge.
-* **`ColorJitter` on the 15-epoch scratch CNN (`V1`):** Although `V1` looked promising on `camera_val_acc` in `seed=0` (`0.7333`), repeating across 3 seeds revealed that 15 epochs is too short for the scratch CNN to learn under heavy color distortion: 3-seed `val_acc` dropped by nearly 10 percentage points (`0.8611` → `0.7639`), and mean `camera_val_acc` (`0.6861 ± 0.0614`) barely beat `V0` (`0.6750 ± 0.0382`).
-* **Frozen Pretrained Backbone (`V6`):** Training only the linear head of `MobileNetV3-Small` overfit the training features (`train_acc = 0.9971`) while underperforming the scratch baseline on `val_acc` (`0.8083` vs. `0.8917`). Domain adaptation to `96×96` leaf images required unfreezing the backbone (`V7`).
-* **Best-epoch checkpointing on 15-epoch `V0` (`V5`):** Produced identical numbers to `V0` (`0.8917` / `0.6667`) because the final epoch (epoch 15) was already the best epoch.
+Transfer Learning — Full Fine-Tuning (V7): Switching to a pretrained MobileNetV3-Small and unfreezing all layers produced the biggest improvement. Standard accuracy rose to 90.8% (+4.7 pp) and camera-like accuracy jumped to 82.2% (+14.7 pp).
+
+Augmentation + Cosine Schedule + 30 Epochs (V8): Adding ColorJitter, geometric augmentations, a cosine learning rate schedule, and longer training (30 epochs) boosted camera-like accuracy to 88.1% (+5.8 pp) and made results more consistent across seeds (91.4% ± 0.5% standard accuracy).
+
+Regularized Optimization (V9): Adding AdamW weight decay (1e-2) and label smoothing (0.1) further stabilized training, achieving the best overall scores on both standard (91.7%) and camera-like validation sets (88.6%).
+
+3. Is the Difference Larger Than the Noise?
+Small scratch-model tweaks (V3, V4, V5) are within the noise: On the 120-image validation set (1 image = 0.83 pp), the baseline (V0) varies by ±2.7 pp on standard accuracy and ±3.8 pp on camera-like accuracy across seeds. Minor single-seed gains of 0.8–1.7 pp in V3 and V4 fall well within this random variance and aren't meaningful on their own.
+
+Transfer learning and the full recipe (V7, V8, V9) clearly beat the noise: Moving from V0 to V8/V9 boosts clean validation accuracy by +5.6 pp (86.1% → 91.7%) and camera-like accuracy by +21.1 pp (67.5% → 88.6%). Every individual seed in V8 and V9 (85.8%–90.0% camera accuracy) outperforms every seed in V0 (64.2%–71.7%), proving the gains are genuine. While V8 and V9 have nearly identical average accuracy (~0.6 pp apart), V9 is noticeably more consistent across seeds (±0.5 pp vs. ±2.1 pp).
+
+4. What Did Not Help
+Global Average Pooling + Dropout on the scratch CNN (V2): Replacing Flatten with AdaptiveAvgPool2d(1) and Dropout(0.2) caused severe underfitting in 15 epochs (val_acc dropped to 80.8% and camera_val_acc to 57.5%), as the small network lost spatial capacity and needed longer to converge.
+
+ColorJitter on the 15-epoch scratch CNN (V1): While promising on a single seed, 3-seed runs showed that 15 epochs wasn't enough to learn under heavy color distortion—clean val_acc dropped by nearly 10 pp (86.1% → 76.4%), and camera_val_acc barely improved over V0 (68.6% vs. 67.5%).
+
+Frozen Pretrained Backbone (V6): Training only the linear head of MobileNetV3-Small heavily overfit the training set (99.7% train_acc) while underperforming the scratch baseline (val_acc 80.8% vs. 89.2%). Adapting to 96×96 leaf images required unfreezing the backbone (V7).
+
+Best-epoch checkpointing on 15-epoch V0 (V5): Yielded identical results to V0 (89.2% / 66.7%) because the final epoch was already the best one.
+
+
 proof [Screenshot from phone](Screenshot_20261115_233737_Samsung Browser.jpg)
-### 5. Which Model to Put on the Phone
+
+
+5. Which Model to Put on the Phone
 I would deploy **`V9` (Full fine-tuned `MobileNetV3-Small` trained for 30 epochs with geometric + `ColorJitter` augmentation, `CosineAnnealingLR`, `AdamW(weight_decay=1e-2)`, `label_smoothing=0.1`, and best-epoch weights)**. 
 
 It achieves the highest accuracy on both clean validation (`0.9167` mean; `0.9250` on `seed=0`) and the camera-like validation set (`0.8861` mean), improving robustness to real phone camera crops, rotations, and lighting shifts by **+21.1 percentage points** over the Task 3 baseline while remaining lightweight and fast enough for real-time in-browser ONNX inference on a phone.
